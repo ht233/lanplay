@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/player_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/black">
+
+    <androidx.media3.ui.PlayerView
+        android:id="@+id/player_view"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:focusable="false"
+        android:background="@color/black" />
+
+    <!-- 片名：左上角半透明悬浮，跟随控制栏显隐，不占控制栏位置 -->
+    <TextView
+        android:id="@+id/title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_marginStart="32dp"
+        android:layout_marginTop="26dp"
+        android:background="#99000000"
+        android:paddingStart="18dp"
+        android:paddingEnd="18dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp"
+        android:maxWidth="640dp"
+        android:textColor="#E6FFFFFF"
+        android:textSize="15sp"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:visibility="gone" />
+
+    <!-- 加载提示 -->
+    <LinearLayout
+        android:id="@+id/loading_box"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="#CC000000"
+        android:paddingStart="26dp"
+        android:paddingEnd="26dp"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp">
+
+        <ProgressBar
+            android:layout_width="22dp"
+            android:layout_height="22dp"
+            android:indeterminateTint="@color/accent" />
+
+        <TextView
+            android:id="@+id/loading_text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="14dp"
+            android:text="正在拉起转码…"
+            android:textColor="@color/text"
+            android:textSize="15sp" />
+    </LinearLayout>
+
+    <!-- 错误提示 -->
+    <LinearLayout
+        android:id="@+id/error_box"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:background="#E6000000"
+        android:padding="28dp"
+        android:visibility="gone">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="播放失败"
+            android:textColor="@color/red"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/error_text"
+            android:layout_width="320dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:textColor="@color/text_dim"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/btn_retry"
+            style="@style/TvButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:text="重试" />
+    </LinearLayout>
+
+    <!-- 控制栏（紧凑两行：进度行 + 按钮行，避免遮挡画面） -->
+    <LinearLayout
+        android:id="@+id/controls"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:orientation="vertical"
+        android:background="#E60A0D12"
+        android:paddingStart="28dp"
+        android:paddingEnd="28dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="10dp"
+        android:visibility="gone">
+
+        <!-- 第一行：时间 + 进度条 + 时长 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/time_current"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="00:00"
+                android:textColor="@color/text"
+                android:fontFeatureSettings="tnum"
+                android:textSize="13sp" />
+
+            <com.lanplay.client.ui.TvSeekBar
+                android:id="@+id/seek"
+                android:layout_width="0dp"
+                android:layout_height="26dp"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:focusable="true"
+                android:progressDrawable="@drawable/seekbar_progress" />
+
+            <TextView
+                android:id="@+id/time_total"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="--:--"
+                android:textColor="@color/text_dim"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <!-- 第二行：全部按钮（等宽分布，一行放下；标题已移到左上角悬浮） -->
+        <LinearLayout
+            android:id="@+id/controls_buttons"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <Button
+                android:id="@+id/btn_play"
+                style="@style/TvButton.Compact"
+                android:layout_width="0dp"
+                android:layout_weight="1.1"
+                android:layout_height="40dp"
+                android:text="暂停" />
+
+            <Button
+                android:id="@+id/btn_back10"
+                style="@style/TvButton.Compact"
+                android:layout_width="0dp"
+                android:layout_weight="0.8"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:text="«10s" />
+
+            <Button
+                android:id="@+id/btn_fwd30"
+                style="@style/TvButton.Compact"
+                android:layout_width="0dp"
+                android:layout_weight="0.8"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:text="30s»" />
+
+            <Button
+                android:id="@+id/btn_speed"
+                style="@style/TvButton.Compact"
+                android:layout_width="0dp"
+                android:layout_weight="0.8"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:text="1.0x" />
+
+            <Button
+                android:id="@+id/btn_audio"
+                style="@style/TvButton.Compact"
+                android:layout_width="0dp"
+                android:layout_weight="0.7"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:text="音轨" />
+
+            <Button
+                android:id="@+id/btn_subtitle"
+                style="@style/TvButton.Compact"
+                android:layout_width="0dp"
+                android:layout_weight="0.7"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:text="字幕" />
+
+            <Button
+                android:id="@+id/btn_loop"
+                style="@style/TvButton.Compact"
+                android:layout_width="0dp"
+                android:layout_weight="0.9"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:text="循环:关" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- 简单选择弹层（音轨/字幕/倍速） -->
+    <LinearLayout
+        android:id="@+id/menu_panel"
+        android:layout_width="420dp"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end|bottom"
+        android:layout_marginEnd="36dp"
+        android:layout_marginBottom="150dp"
+        android:orientation="vertical"
+        android:background="@drawable/bg_card"
+        android:padding="18dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/menu_title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_dim"
+            android:textSize="13sp"
+            android:text="选择" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/menu_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" />
+    </LinearLayout>
+
+    <!-- 跳转提示 toast -->
+    <TextView
+        android:id="@+id/seek_hint"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="46dp"
+        android:background="#CC000000"
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp"
+        android:textColor="@color/text"
+        android:textSize="17sp"
+        android:visibility="gone" />
+</FrameLayout>

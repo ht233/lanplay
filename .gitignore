@@ -1,0 +1,50 @@
+# ---------- 依赖与工具链（体积大，不入库）----------
+bin/
+_toolchain/
+
+# ---------- 构建产物 ----------
+dist/
+build/
+out/
+*.asar
+
+# ---------- 运行时数据（配置、日志、HLS 缓存、媒体缓存）----------
+data/
+data-*/
+*.log
+
+# ---------- Android ----------
+android/.gradle/
+android/local.properties
+android/build/
+android/app/build/
+android/.idea/
+android/*.iml
+android/captures/
+android/.externalNativeBuild/
+android/.cxx/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# ---------- Node / Electron ----------
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- 编辑器 / 系统 ----------
+.vscode/
+.idea/
+*.swp
+*~
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ---------- 临时文件 ----------
+*.tmp
+*.bak
+*.orig
+*.rej

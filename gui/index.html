@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LanPlay · 服务端</title>
+<script>
+  // 在首帧前应用主题，避免闪烁（含「跟随系统」）
+  (function () {
+    try {
+      var auto = localStorage.getItem('lanplay.themeAuto') === '1';
+      var t = localStorage.getItem('lanplay.theme');
+      if (auto) {
+        t = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+      }
+      if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+    } catch (e) { /* ignore */ }
+  })();
+</script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo">LanPlay</span><span class="dot">·</span><span class="sub">服务端</span>
+  </div>
+  <div class="metrics">
+    <span class="pill" id="pill-serverid" title="服务ID">服务ID <b>—</b></span>
+    <span class="pill" id="pill-lan" title="局域网访问地址">局域网 <b>—</b></span>
+    <span class="pill" id="pill-cpu" title="CPU 占用">CPU <b>—</b></span>
+    <span class="pill hidden" id="pill-gpu" title="GPU 占用（检测到可用 GPU 时显示，支持 NVIDIA / AMD / Intel）">GPU <b>—</b></span>
+    <span class="pill" id="pill-mem" title="内存占用">内存 <b>—</b></span>
+    <span class="pill" id="pill-transcode" title="转码会话">转码 <b>0/0</b></span>
+    <span class="pill warn hidden" id="pill-ffmpeg" title="ffmpeg 状态">ffmpeg 未就绪</span>
+  </div>
+  <div class="spacer"></div>
+  <button class="theme-toggle" id="btn-theme" title="切换亮色 / 深色主题（快捷键 Ctrl+Shift+L）">
+    <span class="theme-icon" id="theme-icon">☀</span><span id="theme-label">亮色</span>
+  </button>
+  <div class="pin-box">
+    <span class="pin-label">配对码</span>
+    <span class="pin-value" id="pin-value">—</span>
+    <button class="btn primary small" id="btn-regen-pin">重新生成</button>
+  </div>
+</header>
+
+<nav class="tabs" id="tabs" role="tablist">
+  <button class="tab active" role="tab" aria-selected="true" data-tab="roots">媒体源</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="sessions">转码会话</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="clients">客户端</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="logs">日志</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="settings">设置</button>
+</nav>
+
+<main class="content">
+  <!-- 资源引用 -->
+  <section class="panel active" id="panel-roots">
+    <div class="card">
+      <div class="card-title">添加媒体源</div>
+      <div class="row">
+        <input id="root-input" class="input" placeholder="单个文件 / 文件夹 / 整个磁盘，例如 C:\ 或 \\NAS\movies 或 /media/movies（可逗号分隔多个）">
+        <button class="btn primary" id="btn-add-root">添加</button>
+        <button class="btn ghost" id="btn-pick-folder" title="选择文件夹">选择文件夹</button>
+        <button class="btn ghost" id="btn-pick-file" title="选择文件">选择文件</button>
+      </div>
+      <div class="hint">仅做轻量索引：登记路径后按需浏览，不做刮削/海报墙；多个媒体源可并存。支持把文件/文件夹直接拖入窗口。目录内的文件增删会实时同步到客户端。</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">媒体源列表 <span class="count" id="roots-count"></span>
+        <span class="spacer"></span>
+        <span class="batch-tools" id="batch-tools">
+          <select class="sort-select" id="roots-sort" title="排序方式">
+            <option value="added">添加顺序</option>
+            <option value="name">名称 ↑</option>
+            <option value="name-desc">名称 ↓</option>
+            <option value="mtime">时间 ↑</option>
+            <option value="mtime-desc">时间 ↓</option>
+            <option value="size">大小 ↑</option>
+            <option value="size-desc">大小 ↓</option>
+            <option value="type">类型 ↑</option>
+            <option value="type-desc">类型 ↓</option>
+          </select>
+          <label class="inline-check"><input type="checkbox" id="roots-check-all"> 全选</label>
+          <button class="btn ghost small" id="btn-batch-enable" disabled>批量启用</button>
+          <button class="btn ghost small" id="btn-batch-disable" disabled>批量禁用</button>
+          <button class="btn danger small" id="btn-batch-remove" disabled>移除选中</button>
+          <button class="btn danger small" id="btn-batch-purge">全部移除</button>
+        </span>
+      </div>
+      <div class="table-wrap roots-scroll">
+        <table class="table" id="roots-table">
+          <thead>
+            <tr><th style="width:36px"><input type="checkbox" id="roots-check-head" title="全选本页" aria-label="全选"></th><th style="width:20%">名称</th><th style="width:34%">路径</th><th style="width:7%">类型</th><th style="width:9%">状态</th><th style="width:24%">操作</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="empty" id="roots-empty">尚未添加媒体源。把文件夹拖进窗口，或在上方粘贴路径。</div>
+    </div>
+
+    <div class="card grow">
+      <div class="card-title">
+        浏览 <span class="crumb" id="browse-path"></span>
+        <span class="spacer"></span>
+        <span class="browse-tools">
+          <select class="sort-select" id="browse-sort" title="排序方式">
+            <option value="name">名称 ↑</option>
+            <option value="name-desc">名称 ↓</option>
+            <option value="mtime">时间 ↑</option>
+            <option value="mtime-desc">时间 ↓</option>
+            <option value="size">大小 ↑</option>
+            <option value="size-desc">大小 ↓</option>
+            <option value="kind">类型 ↑</option>
+            <option value="kind-desc">类型 ↓</option>
+          </select>
+          <button class="btn ghost small" id="btn-browse-refresh" title="重新读取该目录">刷新</button>
+          <button class="btn ghost small hidden" id="btn-browse-up">返回上级</button>
+        </span>
+      </div>
+      <div class="table-wrap">
+        <table class="table" id="browse-table">
+          <thead><tr><th style="width:50%">名称</th><th style="width:12%">类型</th><th style="width:14%">大小</th><th style="width:24%">操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div class="empty" id="browse-empty">选择上方媒体源的「浏览」</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 转码会话 -->
+  <section class="panel" id="panel-sessions">
+    <div class="card">
+      <div class="card-title">当前会话 <span class="count" id="sessions-count"></span></div>
+      <div class="table-wrap roots-scroll">
+        <table class="table" id="sessions-table">
+          <thead>
+            <tr><th style="width:12%">会话</th><th style="width:30%">文件</th><th style="width:9%">模式</th><th style="width:9%">状态</th><th style="width:12%">位置/总长</th><th style="width:12%">客户端</th><th style="width:9%">编码器</th><th style="width:7%">操作</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="empty" id="sessions-empty">当前没有转码会话<br><span class="hint">客户端开始播放后，此处实时显示转码状态</span></div>
+    </div>
+    <div class="card">
+      <div class="card-title">最近会话</div>
+      <div class="table-wrap roots-scroll">
+        <table class="table" id="history-table">
+          <thead><tr><th style="width:34%">文件</th><th style="width:14%">客户端</th><th style="width:12%">时长</th><th style="width:20%">结束时间</th><th style="width:20%">结果</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="empty" id="history-empty">暂无历史</div>
+    </div>
+  </section>
+
+  <!-- 客户端 -->
+  <section class="panel" id="panel-clients">
+    <div class="card">
+      <div class="card-title">已配对客户端 <span class="count" id="clients-count"></span></div>
+      <div class="table-wrap roots-scroll">
+        <table class="table" id="clients-table">
+          <thead><tr><th style="width:18%">名称</th><th style="width:14%">型号</th><th style="width:14%">IP</th><th style="width:18%">配对时间</th><th style="width:18%">最近活跃</th><th style="width:10%">状态</th><th style="width:8%">操作</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="empty" id="clients-empty">还没有客户端配对。在投影仪上打开 LanPlay 客户端，输入配对码即可。</div>
+      <div class="hint">客户端首次连接需输入顶部配对码；配对后可长期免密重连。可在设置中关闭配对码校验。</div>
+    </div>
+  </section>
+
+  <!-- 日志 -->
+  <section class="panel" id="panel-logs">
+    <div class="card grow">
+      <div class="card-title">运行日志 <span class="count" id="log-seq">SEQ 0</span>
+        <span class="spacer"></span>
+        <label class="inline-check"><input type="checkbox" id="log-follow" checked> 跟随最新</label>
+        <button class="btn ghost small" id="btn-log-export">导出</button>
+        <button class="btn ghost small" id="btn-log-clear">清空</button>
+      </div>
+      <div class="log-view" id="log-view"></div>
+    </div>
+  </section>
+
+  <!-- 设置 -->
+  <section class="panel" id="panel-settings">
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">服务</div>
+        <div class="field"><label>服务名称</label><input class="input" id="set-name"></div>
+        <div class="field"><label>HTTP 端口</label><input class="input" id="set-port" type="number" min="1024" max="65535">
+          <div class="hint small">端口被占用时自动顺延（重启生效）</div></div>
+        <div class="field"><label>最大并发转码</label><input class="input" id="set-maxsessions" type="number" min="1" max="8"></div>
+        <div class="field switch-row"><label>启用配对码校验</label><label class="switch"><input type="checkbox" id="set-requirepin"><span></span></label></div>
+        <div class="field switch-row"><label>启用局域网自动发现</label><label class="switch"><input type="checkbox" id="set-discovery"><span></span></label></div>
+        <div class="field switch-row"><label>优先硬件编码</label><label class="switch"><input type="checkbox" id="set-hw"><span></span></label></div>
+        <div class="row end"><button class="btn primary" id="btn-save-settings">保存设置</button></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">默认转码参数</div>
+        <div class="field"><label>分辨率</label>
+          <select class="input" id="set-resolution">
+            <option value="auto">自动（>1080p 时降到 1080p）</option>
+            <option value="source">保持源分辨率</option>
+            <option value="1080">1080p</option>
+            <option value="720">720p</option>
+            <option value="576">576p</option>
+            <option value="480">480p</option>
+          </select></div>
+        <div class="field"><label>视频码率（kbps）</label><input class="input" id="set-bitrate" type="number" min="500" max="40000" step="100"></div>
+        <div class="field"><label>帧率</label>
+          <select class="input" id="set-fps"><option value="auto">自动（源帧率）</option><option value="30">30</option><option value="25">25</option><option value="24">24</option></select></div>
+        <div class="field"><label>编码格式</label>
+          <select class="input" id="set-codec"><option value="h264">H.264（兼容性最好）</option><option value="hevc">H.265 / HEVC</option></select></div>
+        <div class="field"><label>画质档位</label>
+          <select class="input" id="set-quality"><option value="speed">流畅优先</option><option value="balanced">均衡</option><option value="quality">画质优先</option></select></div>
+        <div class="field"><label>音频码率（kbps）</label><input class="input" id="set-audiobitrate" type="number" min="64" max="320" step="16"></div>
+        <div class="field"><label>低码率源直通</label>
+          <select class="input" id="set-directplay">
+            <option value="auto">自动（H.264/HEVC + ≤1080p + ≤8Mbps 时免转码）</option>
+            <option value="off">关闭（一律转码）</option>
+          </select></div>
+        <div class="row end"><button class="btn ghost" id="btn-save-transcode">保存转码参数</button></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">硬件与依赖</div>
+        <div class="kv"><span>ffmpeg</span><b id="hw-ffmpeg">检测中…</b></div>
+        <div class="kv"><span>版本</span><b id="hw-version">-</b></div>
+        <div class="kv"><span>可用硬件编码器</span><b id="hw-encoders">-</b></div>
+        <div class="kv"><span>编码方式说明</span><b id="hw-note" style="font-weight:400;color:var(--dim)">-</b></div>
+        <div class="row end"><button class="btn ghost" id="btn-redetect">重新检测</button></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">外观</div>
+        <div class="field">
+          <label>界面主题</label>
+          <div class="theme-preview">
+            <div class="theme-swatch" data-swatch="dark" id="swatch-dark">
+              <div class="swatch-dots"><i></i><i></i><i></i></div>
+              深色
+            </div>
+            <div class="theme-swatch" data-swatch="light" id="swatch-light">
+              <div class="swatch-dots"><i></i><i></i><i></i></div>
+              亮色
+            </div>
+          </div>
+          <div class="hint small">主题仅影响服务端界面，设置会随本机保存。快捷键 Ctrl+Shift+L。</div>
+        </div>
+        <div class="field switch-row"><label>跟随系统主题</label><label class="switch"><input type="checkbox" id="set-theme-auto"><span></span></label></div>
+        <div class="hint small">开启后，界面会随 Windows 的浅色/深色模式自动切换。</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">数据与维护</div>
+        <div class="kv"><span>程序目录</span><b id="info-root">-</b></div>
+        <div class="kv"><span>配置/日志</span><b>data\config.json · data\logs</b></div>
+        <div class="row">
+          <button class="btn ghost" id="btn-open-data">打开数据目录</button>
+          <button class="btn danger-ghost" id="btn-quit">退出服务端</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="drop-overlay hidden" id="drop-overlay">
+  <div class="drop-inner">
+    <div class="drop-icon">＋</div>
+    <div>松开即可添加为媒体源</div>
+    <div class="hint">支持文件、文件夹与多个项目</div>
+  </div>
+</div>
+
+
+<div class="toasts" id="toasts"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+# 统一换行处理：源码用 LF，Windows 脚本用 CRLF
+* text=auto eol=lf
+
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# 二进制文件（不做换行转换、不参与文本 diff）
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.apk binary
+*.aab binary
+*.exe binary
+*.dll binary
+*.zip binary
+*.7z binary
+*.woff2 binary

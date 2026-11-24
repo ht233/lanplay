@@ -1,0 +1,79 @@
+# LanPlay 验收报告
+
+> 本报告记录当前版本（v1.0.0）的验收结论与实测证据。
+
+测试环境：Windows 11 Pro（Ryzen 5 5500，12 逻辑核 / 8 GB 内存，无独立 GPU）＋ Android TV 9 模拟器（API 28 / 1280×720，与目标机小明 Q1 同档）；版本：服务端 / 客户端 1.0.0。
+
+## 一、PRD 验收项
+
+| # | PRD 验收项 | 结果 | 证据 |
+|---|---|---|---|
+| 1 | 服务端解压后可启动 GUI，能添加单文件、多文件、文件夹、整盘及网络路径引用 | ✅ 通过 | `dist\LanPlay-win64\LanPlay.exe` 双击启动；粘贴路径 /「选择文件夹」/「选择文件」/ **全窗口拖拽** 四种方式均可添加；引用根支持禁用/移除/排序 |
+| 2 | 客户端可通过自动发现或手动 IP 连接服务端，并列出服务端引用内容 | ✅ 通过 | UDP 52310 发现（含 MulticastLock）与手动地址；Android TV 9 模拟器实测：手动输入地址 + 配对码 → 进入浏览页列出引用根与文件；`ApiContractTest` / `UiBehaviourTest` 覆盖同一链路 |
+| 3 | 播放高码率片源时由服务端转码推流，投影仪不直接解码原片且播放稳定 | ✅ 服务端侧通过 | `/api/play` 返回 `PLAYING`、`encoder=h264_mf`；ffmpeg 命令行含 `-readrate 1 -i <源> -c:v h264_mf -f hls`；HLS 分片持续生成（双端验证）。客户端只持有 `/hls/` URL，不接触源文件 |
+| 4 | 遥控器可完成播放/暂停、快进快退、进度调整、倍速、选集、字幕/音轨切换 | ✅ 通过 | 模拟器实测（真实遥控器按键事件）：OK 呼出控制栏；进度条左右键步进、长按连发；倍速 2.0x 后服务端出现 `-readrate 2 / atempo=2`；音轨「✓国语 / English」切换生效；字幕正常渲染；HOME 回前台自动续播；退出后会话数归 0 |
+| 5 | 服务端可调用 GPU/CPU 转码，支持字幕处理与会话释放 | ✅ 通过 | 启动日志「硬件编码可用：MediaFoundation H.264」；无独显时回退 libx264；文本字幕 `/api/subtitle/vtt` 返回 WEBVTT；图形字幕走 `overlay` 烧录；`/api/session/stop` 后进程结束、`sweep()` 20s 内回收 |
+| 6 | 服务端为绿色免安装形态，默认配置可开箱使用 | ✅ 通过 | `dist\LanPlay-win64`（479 MB）整个文件夹拷贝即用；首次运行自动生成 `data\config.json`（默认端口 8099、maxSessions 2、H.264/4000k/自动分辨率）；端口占用自动顺延 |
+| 7 | （追加需求）服务端支持亮色主题切换 | ✅ 通过 | 顶栏「☀ 亮色」按钮 / 设置页「外观」预览块 / `Ctrl+Shift+L`；深浅两套主题下各页面均可读；选择写入 localStorage 刷新后保持；「跟随系统」读取 `prefers-color-scheme` |
+
+## 二、实测记录
+
+### 服务端启动（便携版）
+
+```
+LanPlay 服务端启动 v1.0.0
+初始配对码：******（可在设置中重新生成）
+ffmpeg 9.1 已检测（LanPlay-win64\bin\ffmpeg.exe）
+硬件编码可用：MediaFoundation H.264
+监听 0.0.0.0:8099；局域网发现服务 UDP:52310
+```
+
+### 端到端播放（HTTP API）
+
+```
+POST /api/pair  {pin, name:"客厅投影仪"}        → token
+GET  /api/roots                                  → [{id:"…", name:"samples"}]
+POST /api/play  {rootId, path:"transcode_1080p_hevc.mkv"}
+     → { state:"PLAYING", encoder:"h264_mf", hardware:true,
+         playlist:"…/hls/<session>/g1/index.m3u8",
+         subtitleTracks:[{kind:"embedded", label:"chi", url:"/api/subtitle/vtt?…"}],
+         audioTracks:[{label:"国语"},{label:"English"}] }
+GET  /hls/<session>/g1/index.m3u8
+     → #EXTM3U / TARGETDURATION:2 / PLAYLIST-TYPE:EVENT / seg00000.ts …
+POST /api/session/seek   {position:12}  → gen=2, offset=12
+POST /api/session/speed  {speed:2}      → gen=3
+POST /api/session/audio  {index:1}      → gen=4, audioIndex=1
+POST /api/session/stop                  → 会话结束，历史记录「正常」
+```
+
+### 客户端 APK 校验
+
+```
+package: com.lanplay.client  versionName=1.0.0
+LEANBACK_LAUNCHER + LAUNCHER 双入口，touchscreen required=false
+```
+
+## 三、客户端验证
+
+Android TV 9 模拟器（1280×720 / 213dpi）跑通「连接 → 浏览 → 播放 → 控制栏 → 进度条 → 倍速 →
+音轨 → 字幕 → HOME 恢复 → 退出释放」全流程；同时保留 Robolectric（JVM 加载真实 Android 9 运行时）自动化回归：
+
+| 测试类 | 用例 | 结果 |
+|---|---|---|
+| SmokeTest（运行时/布局/控件） | 4 | ✅ |
+| ApiContractTest（真实服务端 API 契约） | 7 | ✅ |
+| UiBehaviourTest（Activity 启动/按键/跳转） | 7 | ✅ |
+| SeekTimelineTest（HLS 时间轴换算） | 4 | ✅ |
+| EdgeCaseTest（异常与边界） | 10 | ✅ |
+| TargetDeviceTest（API 28/低内存/非触摸） | 5 | ✅ |
+| **合计** | **37** | **0 失败** |
+
+Android Lint：**0 error**。模拟器实测暴露的问题（seek 时间轴、字幕不显示、Activity 栈堆积、焦点闭环等）
+均已修复，详见 [android-verification.md](android-verification.md)。
+
+## 四、未验证项与风险
+
+1. **Android 实机**：模拟器已覆盖主要交互路径，但**尚未在真实小明 Q1 上回归**。建议实机重点验证：拖动进度条、按 HOME 后回前台、字幕字体大小。
+2. **无线带宽**：1080p@4 Mbps 在 2.4G 拥挤环境下可能抖动；建议客户端设置里降到 2500 kbps / 720p。
+3. **图形字幕**：PGS 烧录需要 `-filter_complex overlay`，在 4K 源上会增加 CPU，需实测。
+4. **签名**：release APK 使用 debug keystore，正式分发前需替换。

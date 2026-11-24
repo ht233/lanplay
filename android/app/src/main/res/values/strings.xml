@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">LanPlay</string>
+    <string name="connect_title">连接 LanPlay 服务端</string>
+    <string name="discovering">正在局域网内搜索服务端…</string>
+    <string name="manual_connect">手动连接</string>
+    <string name="server_address">服务端地址（如 192.168.1.10:8099）</string>
+    <string name="pair_code">配对码（服务端顶部显示）</string>
+    <string name="device_name">本机名称</string>
+    <string name="connect">连接</string>
+    <string name="recent">最近连接</string>
+    <string name="browse_title">媒体浏览</string>
+    <string name="loading">加载中…</string>
+    <string name="empty_dir">此目录为空</string>
+    <string name="thumb_desc">媒体缩略图</string>
+    <string name="view_list">列表</string>
+    <string name="view_grid">大图</string>
+    <string name="sort_title">排序方式</string>
+    <string name="add_root_title">添加媒体源</string>
+    <string name="add_root_hint">输入服务端本机的文件夹路径，例如 D:\Movies</string>
+    <string name="pair_expired">配对已失效，请返回重新连接</string>
+    <string name="image_viewer">图片查看</string>
+</resources>
