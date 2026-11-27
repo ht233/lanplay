@@ -66,8 +66,8 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_PATH = "path"
         private const val POLL_FAIL_LIMIT = 5
 
-        /** 控制栏完整态（按钮行可见）的自动隐藏延时：停止操作后 3.4s */
-        private const val CONTROLS_HIDE_DELAY_MS = 3400L
+        /** 控制栏完整态（按钮行可见）的自动隐藏延时：停止操作后 2s */
+        private const val CONTROLS_HIDE_DELAY_MS = 2000L
 
         /** 轻量态（仅底部进度条，scrub/暂停时）的自动隐藏延时：停止操作后 2s */
         private const val SEEKBAR_ONLY_HIDE_DELAY_MS = 2000L
@@ -418,10 +418,10 @@ class PlayerActivity : AppCompatActivity() {
         binding.title.text = res.title
         binding.timeTotal.text = BrowseActivity.formatDuration(duration)
         binding.btnSpeed.text = "${currentSpeed}x"
-        // 片名跟随控制栏显隐：起播短暂展示 3.4 秒后随控制栏自动隐藏（按上/下/OK 重新呼出）
+        // 片名跟随控制栏显隐：起播短暂展示 2 秒后随控制栏自动隐藏（按上/下/OK 重新呼出）
         binding.title.visibility = View.VISIBLE
         handler.removeCallbacks(hideTitleRunnable)
-        handler.postDelayed(hideTitleRunnable, 3400)
+        handler.postDelayed(hideTitleRunnable, CONTROLS_HIDE_DELAY_MS)
 
         binding.loadingBox.visibility = View.VISIBLE
         binding.loadingText.text = "开始转码（${res.encoder.ifBlank { "编码器" }}）…"
@@ -1171,7 +1171,7 @@ class PlayerActivity : AppCompatActivity() {
                 val f = currentFocus
                 if (f != null && f.isDescendantOf(binding.controls)) {
                     // 用户正在控制栏内移动焦点：刷新交互时刻并重新计时（补充 33：
-                    // 计时基准是 lastInteractionAt，停止操作 3.4s 后照常隐藏）
+                    // 计时基准是 lastInteractionAt，停止操作 2s 后照常隐藏）
                     scheduleControlsHide(CONTROLS_HIDE_DELAY_MS)
                     return super.onKeyDown(keyCode, event)
                 }

@@ -88,9 +88,9 @@ Android Lint：**0 error**。模拟器实测暴露的问题（seek 时间轴、�
 - 触屏：item_media*.xml 移除 ocusableInTouchMode（列表首点即点击）；PlayerView 点击切换控制栏显隐；TvSeekBar 新增 onTouchEvent（DOWN/MOVE/UP 映射进度，equestDisallowInterceptTouchEvent 防滚动拦截）。遥控器按键路径全部独立，未改动。
 
 **验证**：
-- 控制栏：呼出后焦点移动持续操作 10s 不隐藏 ✔；OK 点按后进入轻量态 2s 隐藏 ✔；无操作 3.4s 自动隐藏 ✔。
+- 控制栏：呼出后焦点移动持续操作不隐藏 ✔；OK 点按后进入轻量态 2s 隐藏 ✔；无操作 2s 自动隐藏 ✔（补充 34 由 3.4s 调整为 2s）。
 - 双击退出：主界面 BACK#1 停留 + 窗口内 BACK#2 退出 ✔；超窗口 BACK#2 仅提示 ✔；播放页 BACK#1 停留 / BACK#2 回浏览页 ✔。
-- 触屏（模拟器）：列表 tap 直接进播放页 ✔；tap 画面呼出/再点隐藏控制栏 ✔；tap 控制栏按钮（30s 步进）生效 ✔；tap 进度条定位跳转（00:00→01:42/03:00）✔。连续 swipe 拖动逻辑同 ACTION_MOVE 代码路径，模拟器时序（3.4s 自动隐藏 + swiftshader 截图延迟）难以稳定演示，待真机复验。
+- 触屏（模拟器）：列表 tap 直接进播放页 ✔；tap 画面呼出/再点隐藏控制栏 ✔；tap 控制栏按钮（30s 步进）生效 ✔；tap 进度条定位跳转（00:00→01:42/03:00）✔。连续 swipe 拖动逻辑同 ACTION_MOVE 代码路径，模拟器时序（2s 自动隐藏 + swiftshader 截图延迟）难以稳定演示，待真机复验。
 - 遥控器回归：五键操作、焦点闭环、双击退出与触屏互不干扰 ✔。
 - 单测 37/37 通过（rowseActivityBackFromSubdirGoesToParent 改为双击语义两段断言）；ssembleRelease exit=0（APK 6,498,404B）。
 - 服务端回归：server-test 84/84、server-edge 27/27、burn-smoke 3/3 PASS。
@@ -112,7 +112,7 @@ Android Lint：**0 error**。模拟器实测暴露的问题（seek 时间轴、�
 **用户反馈三问题**：① 控制栏左右移动焦点后停止操作仍不自动隐藏（一直显示）；② 「循环」关闭后播完仍连播下一集；③ 短视频播放约 10 秒就结束跳下一集，时长随视频长短增减（补充 32 的钳制修复只解决了一半）。
 
 **根因与修复**：
-- ①「停止操作」原判定 = 焦点是否在控制栏内——焦点停在按钮上不动 ≠ 正在操作，倒计时被无限挂起。重写为 lastInteractionAt（最后按键时刻）基准：呼出即计时，任何按键刷新时刻，到期（3.4s/轻量态 2s）无新交互才隐藏。
+- ①「停止操作」原判定 = 焦点是否在控制栏内——焦点停在按钮上不动 ≠ 正在操作，倒计时被无限挂起。重写为 lastInteractionAt（最后按键时刻）基准：呼出即计时，任何按键刷新时刻，到期（完整态 2s/轻量态 2s）无新交互才隐藏。
 - ② onPlaybackEnded 在 loopMode=off 时也走 playNext()。改为 off/未设置 → 保存进度 + 停会话 + 退出播放页。
 - ③ 决定性实验：-readrate_initial_burst 一旦设置，-readrate 1 在直通模式下**全程失效**（burst=18.6 → speed=2.51x；无 burst → speed=1.02x 完美实时；但无 burst 起播要等 20s+——burst 是起播必需）。真正的问题是 ffmpeg 写完全片退出后会话被置 ENDED → 客户端 pos 才 1/3 就被轮询踢去连播。修复：close 分支「写完全部内容」时**保持 PLAYING**（proc=null），客户端把磁盘上已就绪的全部分片播完，由 ExoPlayer STATE_ENDED 本地触发连播/结束；.ts 分片请求也刷新会话活跃度（ExoPlayer 对 event 型 m3u8 只拉一次，分片请求是缓冲期唯一活性证据）；idle 清扫条件覆盖「无进程但有观众」的会话。
 
