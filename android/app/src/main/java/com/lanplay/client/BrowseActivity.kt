@@ -8,6 +8,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -572,7 +573,40 @@ class BrowseActivity : AppCompatActivity() {
             currentRootId?.let { loadDir(it, parent, fromDir, takeFocus = true) }
             return
         }
+        // 已在根目录：防误触退出，2 秒内连按两次 BACK 才真正退出应用
+        val now = System.currentTimeMillis()
+        if (now - lastBackAt > DOUBLE_BACK_WINDOW_MS) {
+            lastBackAt = now
+            Toast.makeText(this, "再按一次返回键退出", Toast.LENGTH_SHORT).show()
+            return
+        }
         super.onBackPressed()
+    }
+
+    companion object {
+        /** 双击返回退出的判定窗口：两次 BACK 间隔小于该值才真正退出 */
+        private const val DOUBLE_BACK_WINDOW_MS = 2000L
+
+        /** 上一次 BACK 按下时间（根目录防误触退出判定用） */
+        private var lastBackAt = 0L
+
+        fun formatDuration(sec: Double): String {
+            if (sec <= 0) return "--:--"
+            val total = sec.toLong()
+            val h = total / 3600
+            val m = (total % 3600) / 60
+            val s = total % 60
+            return if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%02d:%02d", m, s)
+        }
+
+        fun humanSize(bytes: Long): String {
+            if (bytes <= 0) return ""
+            val units = arrayOf("B", "KB", "MB", "GB", "TB")
+            var n = bytes.toDouble()
+            var i = 0
+            while (n >= 1024 && i < units.size - 1) { n /= 1024; i++ }
+            return if (i == 0) "${n.toInt()} ${units[i]}" else String.format("%.1f %s", n, units[i])
+        }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent?): Boolean {
@@ -884,26 +918,6 @@ class BrowseActivity : AppCompatActivity() {
                 showRootMenu(r)
                 true
             }
-        }
-    }
-
-    companion object {
-        fun formatDuration(sec: Double): String {
-            if (sec <= 0) return "--:--"
-            val total = sec.toLong()
-            val h = total / 3600
-            val m = (total % 3600) / 60
-            val s = total % 60
-            return if (h > 0) String.format("%d:%02d:%02d", h, m, s) else String.format("%02d:%02d", m, s)
-        }
-
-        fun humanSize(bytes: Long): String {
-            if (bytes <= 0) return ""
-            val units = arrayOf("B", "KB", "MB", "GB", "TB")
-            var n = bytes.toDouble()
-            var i = 0
-            while (n >= 1024 && i < units.size - 1) { n /= 1024; i++ }
-            return if (i == 0) "${n.toInt()} ${units[i]}" else String.format("%.1f %s", n, units[i])
         }
     }
 }

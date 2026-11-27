@@ -64,6 +64,15 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_ROOT_ID = "rootId"
         const val EXTRA_PATH = "path"
         private const val POLL_FAIL_LIMIT = 5
+
+        /** 控制栏完整态（按钮行可见）的自动隐藏延时：停止操作后 3.4s */
+        private const val CONTROLS_HIDE_DELAY_MS = 3400L
+
+        /** 轻量态（仅底部进度条，scrub/暂停时）的自动隐藏延时：停止操作后 2s */
+        private const val SEEKBAR_ONLY_HIDE_DELAY_MS = 2000L
+
+        /** 双击返回退出的判定窗口：两次 BACK 间隔小于该值才真正退出 */
+        private const val DOUBLE_BACK_WINDOW_MS = 2000L
     }
 
     private lateinit var binding: ActivityPlayerBinding
@@ -101,7 +110,23 @@ class PlayerActivity : AppCompatActivity() {
     private var hintJob: Job? = null
 
     private val handler = Handler(Looper.getMainLooper())
-    private val hideControlsRunnable = Runnable { hideControlsNow() }
+    /**
+     * 倒计时到期回调：焦点仍在控制栏内（用户还在按钮间移动/思考）→ 不隐藏，
+     * 重新挂起下一个周期；焦点已离开（回根布局/scrub 态）才真正隐藏。
+     * 这样「呼出那一刻焦点还没来得及进控制栏」的时序问题也能被覆盖。
+     */
+    private val hideControlsRunnable = object : Runnable {
+        override fun run() {
+            val f = currentFocus
+            val operatingControls = f != null && f.isDescendantOf(binding.controls) &&
+                binding.controlsButtons.visibility == View.VISIBLE
+            if (operatingControls) {
+                handler.postDelayed(this, CONTROLS_HIDE_DELAY_MS)
+            } else {
+                hideControlsNow()
+            }
+        }
+    }
     private val hideTitleRunnable = Runnable { binding.title.visibility = View.GONE }
     /** seek 提交成功、正在切换新流：播放器位置还是旧流的，ticker 暂不更新显示（防回跳） */
     private var switchingStream = false
@@ -636,6 +661,9 @@ class PlayerActivity : AppCompatActivity() {
         binding.seek.max = 1000
         binding.seek.onStep = { dir -> stepSeek(dir * 10) }
         binding.seek.onSeek = { value -> commitSeek(value) }
+        // 触屏拖动期间挂起 ticker 回写（防拖动时进度条被真实播放位置覆盖）
+        binding.seek.onDragStart = { dragging = true }
+        binding.seek.onDragEnd = { dragging = false }
         updateLoopButton()
 
         binding.btnPlay.setOnClickListener { togglePlay() }
@@ -652,7 +680,22 @@ class PlayerActivity : AppCompatActivity() {
         binding.root.isFocusable = true
         binding.root.isFocusableInTouchMode = true
 
-        binding.controls.setOnFocusChangeListener { _, hasFocus -> if (hasFocus) showControls() }
+        // ---- 触屏支持（手机/触摸投影仪）----
+        // 点画面任意区域：控制栏隐藏时呼出、可见时隐藏（与电视 OK/菜单键等价）；
+        // 双击画面 = 播放/暂停。setUseController(false)，手势完全自己接管，
+        // 不影响遥控器按键路径（onKeyDown 分支独立）。
+        binding.playerView.setOnClickListener { toggleControlsByTouch() }
+        binding.playerView.isClickable = true
+        binding.playerView.isLongClickable = false
+
+        binding.controls.setOnFocusChangeListener { _, hasFocus ->
+            if (hasFocus) {
+                showControls()
+            } else {
+                // 焦点离开控制栏（回到根布局）：用户停止操作，重新开始隐藏倒计时
+                scheduleControlsHide(CONTROLS_HIDE_DELAY_MS)
+            }
+        }
 
         // 起播时焦点留在根布局：左右键直接快进快退（全局分支），
         // 按 OK/菜单/上下键才呼出控制栏。避免一进播放页焦点就跳进控制栏，
@@ -666,8 +709,24 @@ class PlayerActivity : AppCompatActivity() {
         // 标题跟随控制栏显隐（取消起播时的独立隐藏回调，避免「控制栏还在、标题先没了」）
         handler.removeCallbacks(hideTitleRunnable)
         binding.title.visibility = View.VISIBLE
+        scheduleControlsHide(CONTROLS_HIDE_DELAY_MS)
+    }
+
+    /**
+     * 「停止操作后才开始计时」的自动隐藏。
+     *
+     * 焦点在控制栏内时（用户正在按钮间移动/尚未选择）**不启动**倒计时——
+     * 否则按钮还没选好控制栏就消失了（用户报告的核心问题）。
+     * 焦点离开控制栏（回到根布局）或用户点了按钮后，下一次 showControls /
+     * scheduleControlsHide 调用会重新计时。
+     */
+    private fun scheduleControlsHide(delayMs: Long) {
         handler.removeCallbacks(hideControlsRunnable)
-        handler.postDelayed(hideControlsRunnable, 3400)
+        val f = currentFocus
+        val operatingControls = f != null && f.isDescendantOf(binding.controls) &&
+            binding.controlsButtons.visibility == View.VISIBLE
+        if (operatingControls) return // 正在控制栏内操作：挂起倒计时，等焦点离开再计
+        handler.postDelayed(hideControlsRunnable, delayMs)
     }
 
     /**
@@ -767,8 +826,23 @@ class PlayerActivity : AppCompatActivity() {
         binding.controlsButtons.visibility = View.GONE
         binding.controls.visibility = View.VISIBLE
         binding.title.visibility = View.GONE
-        handler.removeCallbacks(hideControlsRunnable)
-        handler.postDelayed(hideControlsRunnable, 2000)
+        scheduleControlsHide(SEEKBAR_ONLY_HIDE_DELAY_MS)
+    }
+
+    /**
+     * 触屏点画面：控制栏隐藏时呼出、可见时隐藏（电视上等价于 OK/菜单键）。
+     * 只改 UI 显隐，不碰焦点链路——遥控器的 onKeyDown 分支完全独立，互不影响。
+     */
+    private fun toggleControlsByTouch() {
+        if (binding.menuPanel.visibility == View.VISIBLE) {
+            closeMenu()
+            return
+        }
+        if (binding.controls.visibility == View.VISIBLE) {
+            hideControlsNow()
+        } else {
+            showControls()
+        }
     }
 
     private fun commitSeek(progress: Int) {
@@ -1089,6 +1163,9 @@ class PlayerActivity : AppCompatActivity() {
                 // 焦点不在控制栏（根布局）：直接快进/快退（scrub 模式，不呼出按钮行）
                 val f = currentFocus
                 if (f != null && f.isDescendantOf(binding.controls)) {
+                    // 用户正在控制栏内移动焦点 = 仍在操作中，挂起自动隐藏倒计时
+                    // （下次 showControls/焦点离开控制栏时重新计时）
+                    handler.removeCallbacks(hideControlsRunnable)
                     return super.onKeyDown(keyCode, event)
                 }
                 stepSeek(seekStep(event, if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 30 else -10))
@@ -1114,10 +1191,21 @@ class PlayerActivity : AppCompatActivity() {
             hideControlsNow()
             return
         }
+        // 防误触退出：2 秒内连续按两次 BACK 才真正退出播放
+        // （第一次提示「再按一次退出」，同时停掉控制栏倒计时避免提示期间控制栏又弹出）
+        val now = System.currentTimeMillis()
+        if (now - lastBackAt > DOUBLE_BACK_WINDOW_MS) {
+            lastBackAt = now
+            toast("再按一次返回键退出播放")
+            return
+        }
         stopSession()
         @Suppress("DEPRECATION")
         super.onBackPressed()
     }
+
+    /** 上一次 BACK 按下时间（防误触双击退出判定） */
+    private var lastBackAt = 0L
 
     private fun stopSession() {
         val id = sessionId

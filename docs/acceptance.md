@@ -77,3 +77,21 @@ Android Lint：**0 error**。模拟器实测暴露的问题（seek 时间轴、�
 2. **无线带宽**：1080p@4 Mbps 在 2.4G 拥挤环境下可能抖动；建议客户端设置里降到 2500 kbps / 720p。
 3. **图形字幕**：PGS 烧录需要 `-filter_complex overlay`，在 4K 源上会增加 CPU，需实测。
 4. **签名**：release APK 使用 debug keystore，正式分发前需替换。
+
+## 五、补充 31：控制栏驻留 / 双击退出 / 触屏支持
+
+**需求**：① 控制栏焦点移动时不自动隐藏，停止操作后才计时；② 播放页与主界面 2 秒内双击 BACK 才退出；③ 增加触屏支持（手机上无响应），且不许改坏遥控器逻辑。
+
+**实现**：
+- 控制栏驻留：scheduleControlsHide(delay) 统一计时——焦点在控制栏内且按钮行可见（操作中）时挂起倒计时，焦点离开或停止操作后重新计时；到期回调重查焦点再决定续期或隐藏（修复第一版「呼出瞬间焦点未生效被误判」的 bug）。
+- 双击退出：PlayerActivity/BrowseActivity 根目录 2 秒窗口内双击 BACK 才退出，首次按下单弹提示；子目录 BACK 仍为返回上级。
+- 触屏：item_media*.xml 移除 ocusableInTouchMode（列表首点即点击）；PlayerView 点击切换控制栏显隐；TvSeekBar 新增 onTouchEvent（DOWN/MOVE/UP 映射进度，equestDisallowInterceptTouchEvent 防滚动拦截）。遥控器按键路径全部独立，未改动。
+
+**验证**：
+- 控制栏：呼出后焦点移动持续操作 10s 不隐藏 ✔；OK 点按后进入轻量态 2s 隐藏 ✔；无操作 3.4s 自动隐藏 ✔。
+- 双击退出：主界面 BACK#1 停留 + 窗口内 BACK#2 退出 ✔；超窗口 BACK#2 仅提示 ✔；播放页 BACK#1 停留 / BACK#2 回浏览页 ✔。
+- 触屏（模拟器）：列表 tap 直接进播放页 ✔；tap 画面呼出/再点隐藏控制栏 ✔；tap 控制栏按钮（30s 步进）生效 ✔；tap 进度条定位跳转（00:00→01:42/03:00）✔。连续 swipe 拖动逻辑同 ACTION_MOVE 代码路径，模拟器时序（3.4s 自动隐藏 + swiftshader 截图延迟）难以稳定演示，待真机复验。
+- 遥控器回归：五键操作、焦点闭环、双击退出与触屏互不干扰 ✔。
+- 单测 37/37 通过（rowseActivityBackFromSubdirGoesToParent 改为双击语义两段断言）；ssembleRelease exit=0（APK 6,498,404B）。
+- 服务端回归：server-test 84/84、server-edge 27/27、burn-smoke 3/3 PASS。
+- 产物：dist 478.7MB；LanPlay-1.0.1-win64+apk.zip 201,688,505B（102 entries：LanPlay.exe 188,614,144B / ffmpeg.exe 110,590,976B / APK 6,498,404B）。

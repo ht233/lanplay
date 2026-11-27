@@ -6,12 +6,14 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.util.AttributeSet
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.View
 
 /**
  * 遥控器友好的进度条：
  * - 左右键步进（默认 10 秒/次，可配）
  * - 长按连续快进/快退（每 120ms 触发一次）
+ * - 触屏：直接拖动定位（手机/触摸投影仪），拖动中回调 onSeek
  * - 屏幕上不显示系统 SeekBar 的小圆点，只画一条清晰的大进度条
  */
 class TvSeekBar @JvmOverloads constructor(
@@ -36,6 +38,10 @@ class TvSeekBar @JvmOverloads constructor(
     var onSeek: ((Int) -> Unit)? = null
     var onStep: ((Int) -> Unit)? = null
 
+    /** 触屏拖动开始/结束通知（调用方可借此挂起 ticker 等刷新逻辑） */
+    var onDragStart: (() -> Unit)? = null
+    var onDragEnd: (() -> Unit)? = null
+
     private val trackPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF2B323B.toInt() }
     private val progressPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFF2F81F7.toInt() }
     private val thumbPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFFFFFF.toInt() }
@@ -48,10 +54,10 @@ class TvSeekBar @JvmOverloads constructor(
     private val rect = RectF()
     private var repeatRunnable: Runnable? = null
     private var repeatDirection = 0
+    private var touchDragging = false
 
     init {
         isFocusable = true
-        isFocusableInTouchMode = true
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -75,6 +81,47 @@ class TvSeekBar @JvmOverloads constructor(
         if (isFocused) {
             val f = RectF(r.left - 4f, r.top - 8f, r.right + 4f, r.bottom + 8f)
             canvas.drawRoundRect(f, radius + 6f, radius + 6f, focusPaint)
+        }
+    }
+
+    /**
+     * 触屏拖动：按下/移动时把触点 x 映射为进度并回调 onSeek（节流由调用方负责）。
+     * 不抢焦点（isFocusableInTouchMode 保持默认 false），遥控器路径不受影响。
+     */
+    override fun onTouchEvent(event: MotionEvent): Boolean {
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                touchDragging = true
+                parent?.requestDisallowInterceptTouchEvent(true)
+                onDragStart?.invoke()
+                seekToTouch(event.x)
+                return true
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (touchDragging) seekToTouch(event.x)
+                return true
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (touchDragging) {
+                    touchDragging = false
+                    seekToTouch(event.x)
+                    onDragEnd?.invoke()
+                }
+                return true
+            }
+        }
+        return super.onTouchEvent(event)
+    }
+
+    private fun seekToTouch(x: Float) {
+        val r = if (rect.isEmpty) {
+            RectF(paddingLeft.toFloat(), 0f, width - paddingRight.toFloat(), 0f)
+        } else rect
+        val frac = if (r.width() <= 0) 0f else ((x - r.left) / r.width()).coerceIn(0f, 1f)
+        val value = (frac * max).toInt()
+        if (value != progressValue) {
+            progressValue = value
+            onSeek?.invoke(value)
         }
     }
 

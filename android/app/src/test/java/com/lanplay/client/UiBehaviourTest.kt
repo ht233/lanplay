@@ -11,6 +11,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.lanplay.client.net.LanPlayApi
 import com.lanplay.client.ui.TvSeekBar
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
@@ -135,9 +136,11 @@ class UiBehaviourTest {
 
         val activity = Robolectric.buildActivity(BrowseActivity::class.java).setup().get()
         repeat(20) { ShadowLooper.idleMainLooper(); Thread.sleep(100) }
-        // 根目录下按返回 → 应退出（finish），不崩溃
+        // 根目录下按返回 → 防误触退出：第一次只提示（不 finish），2 秒内第二次才退出
         activity.onBackPressed()
-        assertTrue("根目录按返回应结束 Activity", activity.isFinishing)
+        assertFalse("根目录第一次返回不应直接结束 Activity", activity.isFinishing)
+        activity.onBackPressed() // 立即第二次 → 窗口内，应退出
+        assertTrue("窗口内第二次返回应结束 Activity", activity.isFinishing)
     }
 
     // ---------------- TvSeekBar（遥控器按键） ----------------
