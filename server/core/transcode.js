@@ -431,10 +431,14 @@ class TranscodeSession extends EventEmitter {
         if (this.stopRequested) return;
         if (code === 0) {
           if (this.position >= this.duration - 3 && this.duration > 0) {
-            this.position = this.duration;
-            this.setState('ENDED');
-            this.manager.logger.success(`[${this.id}] 转码正常结束（播放到片尾）`);
+            // 写完全片（播放到片尾）：保持 PLAYING 让客户端把磁盘上已写完的分片播完，
+            // 由客户端 ExoPlayer STATE_ENDED 触发连播/结束（补充 33）。
+            // 不能置 ENDED：burst 模式下 ffmpeg 写完的速度远快于实时播放，
+            // 客户端 pos 才 1/3 就被 ENDED 踢去连播（实测 31s 片 13s 写完、客户端 10s 被断流）。
+            this.proc = null;
+            this.manager.logger.success(`[${this.id}] 转码写完全部内容，等待客户端播完（HLS 分片已就绪）`);
           } else {
+            this.proc = null;
             this.setState('ENDED');
             this.manager.logger.info(`[${this.id}] 转码进程结束`);
           }

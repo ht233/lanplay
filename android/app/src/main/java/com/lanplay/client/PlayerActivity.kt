@@ -7,6 +7,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
@@ -79,6 +80,9 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var api: LanPlayApi
     private var player: ExoPlayer? = null
 
+    /** 最后一次按键/焦点交互时刻（elapsedRealtime），控制栏自动隐藏的「停止操作」判定基准 */
+    private var lastInteractionAt = 0L
+
     private var rootId: String = ""
     private var relPath: String = ""
     private var sessionId: String = ""
@@ -111,19 +115,16 @@ class PlayerActivity : AppCompatActivity() {
 
     private val handler = Handler(Looper.getMainLooper())
     /**
-     * 倒计时到期回调：焦点仍在控制栏内（用户还在按钮间移动/思考）→ 不隐藏，
-     * 重新挂起下一个周期；焦点已离开（回根布局/scrub 态）才真正隐藏。
-     * 这样「呼出那一刻焦点还没来得及进控制栏」的时序问题也能被覆盖。
+     * 倒计时到期回调：距上次按键交互超过阈值（真的停止操作了）→ 隐藏；
+     * 期间有新交互 → 重新计时再等一个周期。
      */
     private val hideControlsRunnable = object : Runnable {
         override fun run() {
-            val f = currentFocus
-            val operatingControls = f != null && f.isDescendantOf(binding.controls) &&
-                binding.controlsButtons.visibility == View.VISIBLE
-            if (operatingControls) {
-                handler.postDelayed(this, CONTROLS_HIDE_DELAY_MS)
-            } else {
+            val idle = SystemClock.elapsedRealtime() - lastInteractionAt
+            if (idle >= CONTROLS_HIDE_DELAY_MS) {
                 hideControlsNow()
+            } else {
+                handler.postDelayed(this, CONTROLS_HIDE_DELAY_MS - idle)
             }
         }
     }
@@ -623,6 +624,14 @@ class PlayerActivity : AppCompatActivity() {
                 }
             }
         }
+        if (api.loopMode == "off" || api.loopMode.isBlank()) {
+            // 循环关闭 = 播完即停（补充 33 用户反馈：关了循环不应继续连播）
+            saveResumePoint()
+            stopSession()
+            toast("播放结束")
+            finish()
+            return
+        }
         if (hasNext) {
             toast("播放结束，自动播放下一个")
             playNext()
@@ -713,19 +722,17 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     /**
-     * 「停止操作后才开始计时」的自动隐藏。
+     * 「停止操作后才开始计时」的自动隐藏（补充 33 重写）。
      *
-     * 焦点在控制栏内时（用户正在按钮间移动/尚未选择）**不启动**倒计时——
-     * 否则按钮还没选好控制栏就消失了（用户报告的核心问题）。
-     * 焦点离开控制栏（回到根布局）或用户点了按钮后，下一次 showControls /
-     * scheduleControlsHide 调用会重新计时。
+     * 计时基准是「最后一次交互」（lastInteractionAt，onKeyDown/onFocusChange 更新），
+     * 不是「焦点在不在控制栏」：焦点停在控制栏按钮上不动 ≠ 正在操作——
+     * 旧逻辑按焦点挂起倒计时，导致用户移完焦点后控制栏永不隐藏（用户实测反馈）。
+     * 现在：呼出时启动计时；到期回调发现距上次交互超过阈值 → 隐藏；期间任何按键
+     * （焦点移动/步进/点按）都会刷新 lastInteractionAt 并重新计时。
      */
     private fun scheduleControlsHide(delayMs: Long) {
+        lastInteractionAt = SystemClock.elapsedRealtime()
         handler.removeCallbacks(hideControlsRunnable)
-        val f = currentFocus
-        val operatingControls = f != null && f.isDescendantOf(binding.controls) &&
-            binding.controlsButtons.visibility == View.VISIBLE
-        if (operatingControls) return // 正在控制栏内操作：挂起倒计时，等焦点离开再计
         handler.postDelayed(hideControlsRunnable, delayMs)
     }
 
@@ -1163,9 +1170,9 @@ class PlayerActivity : AppCompatActivity() {
                 // 焦点不在控制栏（根布局）：直接快进/快退（scrub 模式，不呼出按钮行）
                 val f = currentFocus
                 if (f != null && f.isDescendantOf(binding.controls)) {
-                    // 用户正在控制栏内移动焦点 = 仍在操作中，挂起自动隐藏倒计时
-                    // （下次 showControls/焦点离开控制栏时重新计时）
-                    handler.removeCallbacks(hideControlsRunnable)
+                    // 用户正在控制栏内移动焦点：刷新交互时刻并重新计时（补充 33：
+                    // 计时基准是 lastInteractionAt，停止操作 3.4s 后照常隐藏）
+                    scheduleControlsHide(CONTROLS_HIDE_DELAY_MS)
                     return super.onKeyDown(keyCode, event)
                 }
                 stepSeek(seekStep(event, if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) 30 else -10))

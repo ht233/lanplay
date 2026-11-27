@@ -136,7 +136,9 @@ class SessionManager extends EventEmitter {
     const now0 = Date.now();
     for (const [id0, s0] of this.sessions) {
       if (['STOPPED', 'ENDED', 'ERROR'].includes(s0.state)) continue;
-      if (s0.proc && now0 - (s0.lastPlaylistAt || s0.createdAt) > IDLE_MS) {
+      // 补充 33：ffmpeg 写完全片退出后 proc=null 但会话保持 PLAYING（客户端还在播缓冲），
+      // 清扫条件要覆盖这种「无进程但有观众」的会话。
+      if ((s0.proc || s0.state === 'PLAYING') && now0 - (s0.lastPlaylistAt || s0.createdAt) > IDLE_MS) {
         this.logger.info(`[${id0}] 超过 ${Math.round(IDLE_MS / 1000)}s 无人拉流，自动停止（最后拉取 ${new Date(s0.lastPlaylistAt || s0.createdAt).toISOString()}）`);
         this.stop(id0, '无人观看自动停止').catch(() => {});
       }

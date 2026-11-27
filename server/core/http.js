@@ -858,12 +858,12 @@ function createHttpServer(ctx) {
     if (!fs.existsSync(full)) return notFound(res);
     const stat = await fsp.stat(full);
     if (stat.isDirectory()) return notFound(res);
-    // 播放列表被拉取 = 播放端还活着：刷新会话活跃度（无人观看自动停止的依据）。
-    // 分片请求不算（可能只是缓冲余量），只认 index.m3u8。
-    if (rest.endsWith('.m3u8')) {
-      const sess = sessions.detail(sid);
-      if (sess) sess.markPlaylistFetch();
-    }
+    // 播放端仍在拉流 = 活跃：m3u8 与分片请求都刷新会话活跃度。
+    // 分片也算（补充 33）：ExoPlayer 对 event 型 m3u8 只拉一次，缓冲/播完前的分片
+    // 请求是唯一的活性证据——漏掉会导致「ffmpeg 写完后转进程退出、会话保持 PLAYING」
+    // 的会话被 idle 清扫误杀（客户端还在慢慢播缓冲）。
+    const sess = sessions.detail(sid);
+    if (sess) sess.markPlaylistFetch();
     const type = rest.endsWith('.m3u8') ? 'application/vnd.apple.mpegurl' : 'video/mp2t';
     res.writeHead(200, {
       'Content-Type': type,
