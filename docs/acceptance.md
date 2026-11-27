@@ -121,4 +121,4 @@ Android Lint：**0 error**。模拟器实测暴露的问题（seek 时间轴、�
 - ① 轻量态（scrub 进度条）2s 隐藏 ✔；MENU 呼出完整控制栏 → 停 5s → 自动隐藏 ✔。
 - ② 循环:列表 → long_3min 播完自动切下一集 ✔；切回循环:关闭 → scrub 至近片尾 → 播完即停回列表（不连播）✔。
 - 回归：Android 单测 37/37、APK 6,498,341B；server-test 84/84、server-edge 27/27、burn-smoke 3/3 PASS。
-- 产物：dist 478.7MB；LanPlay-1.0.2-win64+apk.zip 201,689,177B（102 entries，包内 transcode.js 含修复确认）。
+- 产物：dist 478.7MB；LanPlay-1.0.1-win64+apk.zip（102 entries，包内 transcode.js 含修复确认；控制栏 2s 调整后随 v1.0.1 资产一并更新）。

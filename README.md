@@ -61,7 +61,7 @@
 
 ```
 lanplay\
-├─ dist\                        ← 构建产物（不入库）：LanPlay-win64\ 绿色版 + LanPlay-Client-1.0.0.apk
+├─ dist\                        ← 构建产物（不入库）：LanPlay-win64\ 绿色版 + LanPlay-Client-1.0.1.apk
 ├─ server\                      ← 服务端源码（Electron 主进程 + HTTP/转码核心）
 │  ├─ main.js                  Electron 入口（托盘、窗口、IPC）
 │  ├─ preload.js               安全预加载脚本
@@ -93,7 +93,7 @@ lanplay\
 
 ### 2. 安装客户端
 
-1. 把 `LanPlay-Client-1.0.0.apk` 拷到投影仪（U 盘 / `adb install`）。
+1. 把 `LanPlay-Client-1.0.1.apk` 拷到投影仪（U 盘 / `adb install`）。
 2. 打开 LanPlay，客户端会自动广播搜索同一局域网内的服务端；
    也可在右侧手动输入 `192.168.x.x:8099`。
 3. 首次连接输入服务端顶部 **配对码**，之后凭 token 免密重连。
