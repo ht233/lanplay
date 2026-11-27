@@ -95,3 +95,15 @@ Android Lint：**0 error**。模拟器实测暴露的问题（seek 时间轴、�
 - 单测 37/37 通过（rowseActivityBackFromSubdirGoesToParent 改为双击语义两段断言）；ssembleRelease exit=0（APK 6,498,404B）。
 - 服务端回归：server-test 84/84、server-edge 27/27、burn-smoke 3/3 PASS。
 - 产物：dist 478.7MB；LanPlay-1.0.1-win64+apk.zip 201,688,505B（102 entries：LanPlay.exe 188,614,144B / ffmpeg.exe 110,590,976B / APK 6,498,404B）。
+## 六、补充 32：短视频「播放一两秒就跳下一集」修复
+
+**现象**：部分 30-40s 的 mp4（h264+aac）起播 1-2 秒后自动结束并连播下一集，连环跳完整个目录（用户实测 F:\问题视频 4 连跳）。ffprobe 确认文件编码正常——非格式问题。
+
+**根因**：直通封装的 ffmpeg 参数 -readrate_initial_burst 40 允许前 40 秒数据不限速突发读取；短视频总时长落在 40s 突发窗口内，-readrate 1 实时限速从未生效 → ffmpeg 0.8 秒写完全部分片退出 → 服务端按「播放到片尾」结束会话 → 客户端刚缓冲到第一二个分片就会话被清 → 连播下一集。长视频（>40s）不受影响：40s 突发后限速接管。手动计时实验：burst=40 时 speed=40.8x/0.82s 写完 28.9s 片；burst=5 时 speed=1.21x/24s——实锤。
+
+**修复**（server/core/transcode.js）：突发窗口钳制到视频时长的 60%（保底 5s）：时长 ≥67s 的视频维持 40s burst 不变（起播速度不受影响）；短视频按 0.6×duration 突发，readrate 1 提前接管限速，ffmpeg 存活至客户端接近片尾才退出。
+
+**验证**：
+- 1.mp4（28.9s）：burst 钳制为 17.35s（日志确认）→ 客户端持续播放至片尾 00:28/28s 自然结束回浏览页 ✔（修复前 1-2s 被踢）。
+- long_3min.mkv（180s）：burst=40 维持不变 ✔，播放正常。
+- 服务端回归：server-test 84/84、server-edge 27/27、burn-smoke 3/3 PASS。

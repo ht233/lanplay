@@ -235,7 +235,13 @@ class TranscodeSession extends EventEmitter {
     // 30→40：R6-R10 实验定案「冻结时长 = 等第一段音频数据到达渲染管线的时长」，
     // 服务端越早产出音频数据，客户端起播等待越短（客户端现为 ExoPlayer 自有缓冲策略）。
     // 实验链针对的 Chromium MSE 缺陷已随试播功能移除（补充 16），40 保留无害且改善冷读。
-    args.push('-readrate_initial_burst', String(Math.max(40, (s.hlsTime || 1) * 10)));
+    // 突发窗口必须钳制在视频时长内：短于突发窗口的片源（如 30-40s 短视频）会被
+    // initial_burst 全速读完 → ffmpeg 秒级退出 → 服务端判「播放到片尾」提前结束会话，
+    // 客户端才播 1-2 秒就被断流（补充 32 用户实测 F:\问题视频 4 连跳）。
+    const burst = Math.max(40, (s.hlsTime || 1) * 10);
+    const dur = this.duration || 0;
+    const clampedBurst = dur > 0 ? Math.min(burst, Math.max(5, dur * 0.6)) : burst;
+    args.push('-readrate_initial_burst', String(clampedBurst));
     if (this.offset > 0.05) args.push('-ss', this.offset.toFixed(3));
     args.push('-i', this.file);
 
